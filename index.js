@@ -2,18 +2,26 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Open SQLite database (creates db.sqlite if not exists)
-const db = new sqlite3.Database('./db.sqlite', (err) => {
-  if (err) {
-    console.error('Error opening database:', err.message);
-  } else {
-    console.log('Connected to SQLite');
-  }
+// === RUN INIT-DB ON VERCEL ===
+if (process.env.VERCEL) {
+  require('./init-db.js')();
+}
+
+const dbPath = path.join(__dirname, 'db.sqlite');
+if (!fs.existsSync(dbPath)) {
+  console.error('db.sqlite missing!');
+  process.exit(1);
+}
+
+const db = new sqlite3.Database(dbPath, (err) => {
+  if (err) console.error(err);
+  else console.log('Connected to SQLite');
 });
 
 // Helper: turn query results into HTML table

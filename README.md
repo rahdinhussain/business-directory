@@ -8,14 +8,14 @@
 
 ## Documentation
 
-### Milestone 1 – Cover Page
-![M1 Cover](cover-m1.png)
+### Milestone 1 – Cover
+![M1](cover-m1.png)
 
 ### Project Description
-![Description](description.png)
+![Desc](description.png)
 
-### Milestone 2 – Cover Page
-![M2 Cover](cover-m2.png)
+### Milestone 2 – Cover
+![M2](cover-m2.png)
 
 ### ERD
 ![ERD](erd.png)
@@ -23,24 +23,33 @@
 ### Relational Schema
 ![Schema](schema.png)
 
-### Milestone 3 – Cover Page
-![M3 Cover](cover-m3.png)
+### Milestone 3 – Cover
+![M3](cover-m3.png)
 
-### Functional Dependencies
-![FD](fd.png)
+### Functional Dependencies (1)
+![FD1](fd-1.png)
 
-### Normalization (Page 1)
-![Norm 1](normalization-1.png)
+### Functional Dependencies (2)
+![FD2](fd-2.png)
 
-### Normalization (Page 2)
-![Norm 2](normalization-2.png)
+### Normalization
+![Norm](normalization.png)
 
 ---
 
-## How to Run Locally
-```bash
-git clone https://github.com/rahdinhussain/business-directory.git
-cd business-directory
-npm install
-node init-db.js
-node index.js
+## Queries
+| Query | Type |
+|------|------|
+| `/projection` | Projection |
+| `/selection` | Selection |
+| `/join` | Join |
+| `/division` | Division |
+| `/agg1` | COUNT |
+| `/agg2` | MAX |
+| `/nested` | Nested |
+| `/delete` | DELETE + CASCADE |
+| `/update` | UPDATE + Trigger |
+
+---
+
+**Submitted: November 15, 2025**
