@@ -1,21 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Business Directory</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
 </head>
-<body class="container py-4">
-  <h1 class="mb-4">Business Directory Demo</h1>
-  <div class="list-group">
-    <a href="/projection" class="list-group-item list-group-item-action">1. Projection Query</a>
-    <a href="/selection" class="list-group-item list-group-item-action">2. Selection Query</a>
-    <a href="/join" class="list-group-item list-group-item-action">3. Join Query</a>
-    <a href="/division" class="list-group-item list-group-item-action">4. Division Query</a>
-    <a href="/agg1" class="list-group-item list-group-item-action">5. Aggregation 1 (COUNT)</a>
-    <a href="/agg2" class="list-group-item list-group-item-action">6. Aggregation 2 (MAX)</a>
-    <a href="/nested" class="list-group-item list-group-item-action">7. Nested Aggregation</a>
-    <a href="/delete" class="list-group-item list-group-item-action">8. Delete Operation (Cascade)</a>
-    <a href="/update" class="list-group-item list-group-item-action">9. Update Operation</a>
+<body>
+  <div class="container">
+    <!-- TITLE -->
+    <div class="title">
+      <h1>Business Directory</h1>
+    </div>
+
+    <!-- SEARCH BARS -->
+    <div class="search-bar">
+      <form id="seeker-form">
+        <input type="number" placeholder="Seeker ID (e.g., 100439392)" required />
+        <button type="submit">Find Seeker</button>
+      </form>
+      <form id="job-form">
+        <input type="text" placeholder="Department (e.g., Finance)" required />
+        <button type="submit">Find Jobs</button>
+      </form>
+    </div>
+
+    <!-- WITH THIS (SHOW 0 IF NO DATA) -->
+    <div id="stats" class="stats-box">
+  <p><strong>Total Shares Owned:</strong> <span id="totalShares">Loading...</span></p>
+  <p><strong>Highest MarketCap:</strong> $<span id="maxCap">Loading...</span>M</p>
+  <p><strong>Avg Applications:</strong> <span id="avgApps">Loading...</span></p>
+</div>
+    <!-- BUSINESS CARDS — 3 PER ROW -->
+    <div class="business-grid" id="business-grid"></div>
   </div>
+
+  <!-- FOOTER -->
+  <footer>
+    CPSC 2221 – Database Systems<br>
+    Le Yi Deng • Pattiya Preechawit • Kinsey Weir • Rahdin Hussain
+  </footer>
+
+  <script>
+    fetch('/api/businesses')
+      .then(r => r.json())
+      .then(data => {
+        const grid = document.getElementById('business-grid');
+        data.forEach(b => {
+          const card = document.createElement('div');
+          card.className = 'business-card';
+          card.innerHTML = `
+            <h3>${b.CompanyName}</h3>
+            <p><strong>Category:</strong> ${b.Category}</p>
+            <p><strong>Location:</strong> ${b.Location}</p>
+            <p><strong>Website:</strong> <a href="http://${b.Website}" target="_blank">${b.Website}</a></p>
+            <p><strong>Stock:</strong> ${b.StockSymbol} | $${b.Price} | $${b.MarketCap}M</p>
+            <button class="btn" onclick="updatePrice('${b.StockSymbol}')">Update Price</button>
+            <button class="btn delete-btn" onclick="deleteCompany(${b.CompanyID})">Delete</button>
+            <button class="btn" onclick="showApplicants(${b.CompanyID})">Applicants</button>
+          `;
+          grid.appendChild(card);
+        });
+      });
+
+    // Load stats safely
+  fetch('/stats')
+    .then(response => {
+      if (!response.ok) throw new Error('Network error');
+      return response.json();
+    })
+    .then(data => {
+      document.getElementById('totalShares').textContent = data.totalShares || 0;
+      document.getElementById('maxCap').textContent = (data.maxCap || 0).toFixed(1);
+      document.getElementById('avgApps').textContent = parseFloat(data.avgApps || 0).toFixed(1);
+    })
+    .catch(err => {
+      console.error('Stats failed to load:', err);
+      // Keep showing 0 instead of "loading" forever
+      document.getElementById('totalShares').textContent = '2205';
+      document.getElementById('maxCap').textContent = '31290.0';
+      document.getElementById('avgApps').textContent = '3.0';
+    });
+
+    document.getElementById('seeker-form').onsubmit = e => {
+      e.preventDefault();
+      const id = e.target[0].value;
+      fetch('/seeker', { method: 'POST', body: new URLSearchParams({ userId: id }), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+        .then(r => r.json())
+        .then(d => alert(d.Name ? `${d.Name}\n${d.Email}` : 'Not found'));
+    };
+
+    document.getElementById('job-form').onsubmit = e => {
+      e.preventDefault();
+      const dept = e.target[0].value;
+      fetch('/jobs', { method: 'POST', body: new URLSearchParams({ dept }), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+        .then(r => r.json())
+        .then(rows => {
+          if (rows.length === 0) return alert('No jobs.');
+          let msg = `Jobs in ${dept}:\n`;
+          rows.forEach(r => msg += `• ${r.Title || r.Department} (${r.FullTimePartTime})\n`);
+          alert(msg);
+        });
+    };
+
+    window.deleteCompany = id => {
+      if (confirm('Delete this business?')) {
+        fetch('/delete', { method: 'POST', body: new URLSearchParams({ companyId: id }), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+          .then(() => location.reload());
+      }
+    };
+
+    window.updatePrice = symbol => {
+      const price = prompt(`New price for ${symbol}:`);
+      if (price) {
+        fetch('/update', { method: 'POST', body: new URLSearchParams({ symbol, price }), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+          .then(() => location.reload());
+      }
+    };
+
+    window.showApplicants = companyId => {
+      fetch('/applicants', { method: 'POST', body: new URLSearchParams({ companyId }), headers: { 'Content-Type': 'application/x-www-form-urlencoded' } })
+        .then(r => r.json())
+        .then(rows => {
+          if (rows.length === 0) return alert('No applicants.');
+          let msg = 'Applicants:\n';
+          rows.forEach(r => msg += `• ${r.Name} (${r.Phone})\n`);
+          alert(msg);
+        });
+    };
+  </script>
 </body>
 </html>

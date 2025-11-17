@@ -1,145 +1,102 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
-const bodyParser = require('body-parser');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static('public'));
 
-// === RUN INIT-DB ON VERCEL ===
-if (process.env.VERCEL) {
-  require('./init-db.js')();
-}
+const db = new sqlite3.Database('db.sqlite');
 
-const dbPath = path.join(__dirname, 'db.sqlite');
-if (!fs.existsSync(dbPath)) {
-  console.error('db.sqlite missing!');
-  process.exit(1);
-}
-
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) console.error(err);
-  else console.log('Connected to SQLite');
+// === API: All businesses ===
+app.get('/api/businesses', (req, res) => {
+  const sql = `
+    SELECT c.CompanyID, c.CompanyName, ch.Category, ch.Location, ch.Website, 
+           s.StockSymbol, s.Price, s.MarketCap
+    FROM Company c
+    JOIN Company_hasA ch ON c.CompanyID = ch.CompanyID
+    JOIN Stock s ON ch.StockSymbol = s.StockSymbol`;
+  db.all(sql, [], (err, rows) => {
+    if (err) return res.status(500).json([]);
+    res.json(rows);
+  });
 });
 
-// Helper: turn query results into HTML table
-function resultsToTable(results) {
-  if (!results || results.length === 0) return '<p>No data.</p>';
-  let html = '<table border="1" style="margin-top:10px;"><tr>';
-  Object.keys(results[0]).forEach(k => html += `<th>${k}</th>`);
-  html += '</tr>';
-  results.forEach(row => {
-    html += '<tr>';
-    Object.values(row).forEach(v => html += `<td>${v}</td>`);
-    html += '</tr>';
+// === STATS: COUNT, MAX, NESTED ===
+// === STATS ROUTE ===
+app.get('/stats', (req, res) => {
+  db.get('SELECT COALESCE(SUM(NumberOfShares), 0) AS totalShares FROM OwnedBy', (err, row1) => {
+    db.get('SELECT COALESCE(MAX(MarketCap), 0) AS maxCap FROM Stock', (err, row2) => {
+      db.get(`
+        SELECT COALESCE(AVG(cnt), 0) AS avgApps FROM (
+          SELECT COUNT(PostID) AS cnt FROM Apply_For GROUP BY UserID
+        )`, (err, row3) => {
+        res.json({
+          totalShares: row1.totalShares,
+          maxCap: row2.maxCap,
+          avgApps: parseFloat(row3.avgApps).toFixed(1)
+        });
+      });
+    });
   });
-  html += '</table>';
-  return html;
-}
+});
 
-// Home
+// === 1. Projection ===
+app.post('/seeker', (req, res) => {
+  db.get('SELECT Name, Email FROM JobSeeker WHERE UserID = ?', [req.body.userId], (err, row) => {
+    res.json(row || { error: 'Not found' });
+  });
+});
+
+// === 2. Selection ===
+app.post('/jobs', (req, res) => {
+  const dept = req.body.dept.trim();
+  db.all('SELECT jp.*, ob.Title, ob.Level FROM JobPosting jp JOIN OfferedBy ob ON jp.PostID = ob.PostID WHERE LOWER(jp.Department) = LOWER(?)', [dept], (err, rows) => {
+    res.json(rows);
+  });
+});
+
+// === 3. Join: Applicants for company ===
+app.post('/applicants', (req, res) => {
+  const sql = `
+    SELECT js.Name, js.Phone
+    FROM JobSeeker js
+    JOIN Apply_For af ON js.UserID = af.UserID
+    JOIN JobPosting jp ON af.PostID = jp.PostID
+    JOIN OfferedBy ob ON jp.PostID = ob.PostID
+    WHERE ob.CompanyID = ?`;
+  db.all(sql, [req.body.companyId], (err, rows) => {
+    res.json(rows);
+  });
+});
+
+// === 8. DELETE Company (CASCADE) ===
+app.post('/delete', (req, res) => {
+  db.run('DELETE FROM Company WHERE CompanyID = ?', [req.body.companyId], function(err) {
+    if (err) return res.json({ success: false });
+    res.json({ success: true, deleted: this.changes });
+  });
+});
+
+// === 9. UPDATE Price + TRIGGER ===
+app.post('/update', (req, res) => {
+  const symbol = req.body.symbol;
+  const price = parseFloat(req.body.price);
+  if (isNaN(price)) return res.json({ success: false });
+
+  db.run('UPDATE Stock SET Price = ? WHERE StockSymbol = ?', [price, symbol], function(err) {
+    if (err || this.changes === 0) return res.json({ success: false });
+    
+    // Manually trigger MarketCap update
+    db.run(`
+      UPDATE Stock SET MarketCap = ? * (
+        SELECT COALESCE(SUM(NumberOfShares), 0) FROM OwnedBy WHERE StockSymbol = ?
+      ) WHERE StockSymbol = ?`, [price, symbol, symbol], () => {
+      res.json({ success: true });
+    });
+  });
+});
+
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-// Projection
-app.get('/projection', (req, res) => res.sendFile(path.join(__dirname, 'public', 'projection.html')));
-app.post('/projection', (req, res) => {
-  db.all('SELECT Name, Email FROM JobSeeker WHERE UserID = ?', [req.body.userId], (err, rows) => {
-    if (err) throw err;
-    res.send(`<h2>Projection</h2>${resultsToTable(rows)}<br><a href="/">Back</a>`);
-  });
-});
-
-// Selection
-app.get('/selection', (req, res) => res.sendFile(path.join(__dirname, 'public', 'selection.html')));
-app.post('/selection', (req, res) => {
-  db.all('SELECT * FROM JobPosting WHERE Department = ?', [req.body.department], (err, rows) => {
-    if (err) throw err;
-    res.send(`<h2>Selection</h2>${resultsToTable(rows)}<br><a href="/">Back</a>`);
-  });
-});
-
-// Join
-app.get('/join', (req, res) => res.sendFile(path.join(__dirname, 'public', 'join.html')));
-app.post('/join', (req, res) => {
-  const sql = `
-    SELECT JobSeeker.Name, JobSeeker.Phone
-    FROM JobSeeker
-    JOIN Apply_For ON JobSeeker.UserID = Apply_For.UserID
-    JOIN JobPosting ON Apply_For.PostID = JobPosting.PostID
-    JOIN OfferedBy ON JobPosting.PostID = OfferedBy.PostID
-    WHERE OfferedBy.Title = ?`;
-  db.all(sql, [req.body.title], (err, rows) => {
-    if (err) throw err;
-    res.send(`<h2>Join</h2>${resultsToTable(rows)}<br><a href="/">Back</a>`);
-  });
-});
-
-// Division
-app.get('/division', (req, res) => res.sendFile(path.join(__dirname, 'public', 'division.html')));
-app.post('/division', (req, res) => {
-  const sql = `
-    SELECT UserID, Name
-    FROM JobSeeker
-    WHERE NOT EXISTS (
-      SELECT * FROM JobPosting
-      WHERE Department = ?
-        AND NOT EXISTS (
-          SELECT * FROM Apply_For
-          WHERE Apply_For.UserID = JobSeeker.UserID
-            AND Apply_For.PostID = JobPosting.PostID
-        )
-    )`;
-  db.all(sql, [req.body.department], (err, rows) => {
-    if (err) throw err;
-    res.send(`<h2>Division</h2>${resultsToTable(rows)}<br><a href="/">Back</a>`);
-  });
-});
-
-// Aggregation 1 (COUNT)
-app.get('/agg1', (req, res) => {
-  db.all('SELECT COUNT(NumberOfShares) AS TotalShares FROM OwnedBy', (err, rows) => {
-    if (err) throw err;
-    res.send(`<h2>Aggregation 1</h2>${resultsToTable(rows)}<br><a href="/">Back</a>`);
-  });
-});
-
-// Aggregation 2 (MAX)
-app.get('/agg2', (req, res) => {
-  db.all('SELECT MAX(MarketCap) AS MaxMarketCap FROM Stock', (err, rows) => {
-    if (err) throw err;
-    res.send(`<h2>Aggregation 2</h2>${resultsToTable(rows)}<br><a href="/">Back</a>`);
-  });
-});
-
-// Nested Aggregation
-app.get('/nested', (req, res) => {
-  const sql = `SELECT AVG(app_cnt) AS AvgApplicationsPerSeeker
-               FROM (SELECT COUNT(PostID) AS app_cnt FROM Apply_For GROUP BY UserID)`;
-  db.all(sql, (err, rows) => {
-    if (err) throw err;
-    res.send(`<h2>Nested Aggregation</h2>${resultsToTable(rows)}<br><a href="/">Back</a>`);
-  });
-});
-
-// Delete (cascade)
-app.get('/delete', (req, res) => res.sendFile(path.join(__dirname, 'public', 'delete.html')));
-app.post('/delete', (req, res) => {
-  db.run('DELETE FROM Company WHERE CompanyID = ?', [req.body.companyId], (err) => {
-    if (err) throw err;
-    res.send(`<h2>Deleted company ${req.body.companyId}</h2><p>Related data removed (cascade).</p><a href="/">Back</a>`);
-  });
-});
-
-// Update
-app.get('/update', (req, res) => res.sendFile(path.join(__dirname, 'public', 'update.html')));
-app.post('/update', (req, res) => {
-  db.run('UPDATE Stock SET Price = ? WHERE StockSymbol = ?', [req.body.price, req.body.stockSymbol], (err) => {
-    if (err) throw err;
-    res.send(`<h2>Updated price for ${req.body.stockSymbol}</h2><a href="/">Back</a>`);
-  });
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running → http://localhost:${PORT}`));
+app.listen(3000, () => console.log('Server at http://localhost:3000'));

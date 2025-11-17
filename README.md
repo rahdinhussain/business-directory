@@ -1,55 +1,53 @@
-# Business Directory – CPSC 2221 Group Project
+# Business Directory – CPSC 2221 Final Project
 
-**Live Demo**: [https://business-directory.vercel.app](https://business-directory.vercel.app)  
-**GitHub**: [github.com/rahdinhussain/business-directory](https://github.com/rahdinhussain/business-directory)  
-**Team**: Le Yi Deng, Pattiya Preechawit, Kinsey Weir, **Rahdin Hussain**
+**Project Title:** Business Directory  
+**Course:** CPSC 2221 – Database Systems  
+**Semester:** Fall 2025  
+**Submission Date:** November 17, 2025
 
----
+### Team Members
+| # | Student Name          | Student ID | Email                     |
+|---|-----------------------|------------|---------------------------|
+| 1 | Le Yi Deng            | 10043435   | ldeng09@mylangara.ca      |
+| 2 | Pattiya Preechawit    | 10044617   | ppreechawit00@mylangara.ca|
+| 3 | Kinsey Weir           | 100400718  | kweir04@mylangara.ca      |
+| 4 | Rahdin Hussain        | 100439392  | rhussain03@mylangara.ca   |
 
-## Documentation
+### Project Overview
+A modern business directory that connects job seekers, companies, and investors.  
+Users can:
+- Browse publicly traded companies with real-time stock data
+- Search job seekers by student/ID
+- Find job postings by department
+- View applicants for each company
+- See live statistics (total shares owned, highest market cap, average applications)
+- Update stock prices (triggers automatic MarketCap recalculation)
+- Delete companies (ON DELETE CASCADE removes all related data)
 
-### Milestone 1 – Cover
-![M1](cover-m1.png)
+### Features Implemented (All 9 Required SQL Concepts)
+1. Projection – Search JobSeeker by ID → Name + Email  
+2. Selection – Find jobs by department  
+3. Join – Show applicants for a selected company  
+4. Aggregation (COUNT) – Total shares owned across all investors  
+5. Aggregation (MAX) – Highest market capitalization  
+6. Nested aggregation – Average number of applications per seeker  
+7. Trigger – MarketCap automatically updates when stock price changes  
+8. DELETE with CASCADE – Removing a company deletes postings, applications, etc.  
+9. UPDATE – Stock price update with trigger
 
-### Project Description
-![Desc](description.png)
+### Technology Stack
+- Node.js + Express (backend)
+- SQLite3 (database)
+- Plain HTML + CSS + vanilla JavaScript (frontend – single-page app)
+- No external frameworks or libraries
 
-### Milestone 2 – Cover
-![M2](cover-m2.png)
+### How to Run the Project
+```bash
+# 1. Install dependencies (only once)
+npm install sqlite3 express
 
-### ERD
-![ERD](erd.png)
+# 2. Create and populate the database
+node init-db.js
 
-### Relational Schema
-![Schema](schema.png)
-
-### Milestone 3 – Cover
-![M3](cover-m3.png)
-
-### Functional Dependencies (1)
-![FD1](fd-1.png)
-
-### Functional Dependencies (2)
-![FD2](fd-2.png)
-
-### Normalization
-![Norm](normalization.png)
-
----
-
-## Queries
-| Query | Type |
-|------|------|
-| `/projection` | Projection |
-| `/selection` | Selection |
-| `/join` | Join |
-| `/division` | Division |
-| `/agg1` | COUNT |
-| `/agg2` | MAX |
-| `/nested` | Nested |
-| `/delete` | DELETE + CASCADE |
-| `/update` | UPDATE + Trigger |
-
----
-
-**Submitted: November 15, 2025**
+# 3. Start the server
+node index.js
